@@ -4,6 +4,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+//#include <curses.h> //-lncurses
+//#include "conio.h"
 
 constexpr int FULLSCREEN = 0x0001;
 constexpr int RESIZABLE = 0x0010;
@@ -19,6 +21,10 @@ constexpr int SCALABLE = 0x1000;
 
 struct coord {
  int x, y;
+};
+
+struct line {
+ coord s, e;
 };
 
 bool attributes;
@@ -128,7 +134,13 @@ struct keyboard {
         mouseUpdate();
         x=mouseX; y=mouseY;
     }
+    /*int update2() {
+        int ch = getch();
+        if(ch != ERR) return ch;
+        return -1;
+    }*/
     void update(GBWindow &gb) {
+        //XPending(gb.dis);
         XNextEvent(gb.dis, &event);
         mouseUpdate();
         if (exposed()) {
@@ -174,6 +186,14 @@ void setForeground(GBWindow &gb, GBColor color) {
 void drawLine(GBWindow& win, int ax, int ay, int bx, int by) {
     setForeground(win, win.draw);
     XDrawLine(win.dis, win.win, win.context, ax, ay, bx, by);
+}
+void drawLine(GBWindow& win, coord a, coord b) {
+    setForeground(win, win.draw);
+    XDrawLine(win.dis, win.win, win.context, a.x, a.y, b.x, b.y);
+}
+void drawLine(GBWindow& win, line l) {
+    setForeground(win, win.draw);
+    XDrawLine(win.dis, win.win, win.context, l.s.x, l.s.y, l.e.x, l.e.y);
 }
 void write(GBWindow& win, int x, int y, const char* text) {
     setForeground(win, win.font);
@@ -268,16 +288,200 @@ void initGB(GBWindow &tmp, const char* title, int width, int height, const int f
         XSetWMNormalHints(tmp.dis, tmp.win, hints);
         XSetWMSizeHints(tmp.dis, tmp.win, hints, PMinSize|PMaxSize);
     }
+    /*initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);*/
 }
 
 void close(GBWindow &gb) {
 	XFreeGC(gb.dis, gb.context);
 	XDestroyWindow(gb.dis,gb.win);
-	XCloseDisplay(gb.dis);	
-	exit(1);			
+	XCloseDisplay(gb.dis);
+	exit(1);
+        //endwin();
 };
 
 void redraw(GBWindow &gb) {
 	XClearWindow(gb.dis, gb.win);
 };
+
+
+bool overlaps(GBShape a, GBShape b) {
+  if ((a.x < (b.x + b.width)) && ((a.x + a.width) > b.x) &&
+   (a.y < (b.y + b.height)) && ((a.y + a.height) > b.y)) {
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
+bool touching(GBShape a, GBShape b) {
+ return overlaps(a,b);
+}
+bool collision(GBShape a, GBShape b) {
+ return overlaps(a,b);
+}
+bool collides(GBShape a, GBShape b) {
+ return overlaps(a,b);
+}
+
+
+bool contains(GBShape a, GBShape b) {
+    if (((b.x + b.width) < (a.x + a.width)) && (b.x > a.x) &&
+     (b.y > a.y) && ((b.y + b.height) < (a.y+a.height))) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+bool contains(GBShape o, int x, int y) {
+ GBShape tmp;
+ tmp.x=x;tmp.y=y;tmp.width=tmp.height=1;
+ return contains(o, tmp);
+}
+
+bool contains(GBShape o, coord c) {
+ return contains(o, c.x, c.y);
+}
+
+bool isAbove(GBShape a, GBShape b) {
+  if((a.y + a.height) < b.y) {
+    return true;
+  } else {
+    return false;
+  }
+}
+bool isAbove(GBShape a, coord b) {
+  if((a.y + a.height) < b.y) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool isBelow(GBShape a, GBShape b) {
+  if(a.y > (b.y + b.height)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+bool isBelow(GBShape a, coord b) {
+  if(a.y > (b.y)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool isRightOf(GBShape a, GBShape b) {
+  if(a.x > (b.x + b.width)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+bool isRightOf(GBShape a, coord b) {
+  if(a.x > (b.x)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool isLeftOf(GBShape a, GBShape b) {
+  if((a.x + a.width) < b.x) {
+    return true;
+  } else {
+    return false;
+  }
+}
+bool isLeftOf(GBShape a, coord b) {
+  if((a.x + a.width) < b.x) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool outOfBoundsOf(GBShape a, GBShape b) {
+  if(isAbove(a, b) || isBelow(a, b)) {
+    return true;
+  } else if(isRightOf(a, b) || isLeftOf(a, b)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+bool outOfBoundsOf(GBShape a, coord b) {
+  if(isAbove(a, b) || isBelow(a, b)) {
+    return true;
+  } else if(isRightOf(a, b) || isLeftOf(a, b)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+int max(int a, int b) {
+if(a>b) return a;
+return b;
+}
+
+int min(int a, int b) {
+if(a<b) return a;
+return b;
+}
+
+bool onSegment(coord p, coord q, coord r) {
+    if (q.x <= max(p.x, r.x) && q.x >= min(p.x, r.x) && q.y <= max(p.y, r.y) && q.y >= min(p.y, r.y)) return true;
+    return false;
+}
+int orientation(coord p, coord q, coord r) {
+    int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+    if (val == 0) return 0;
+    return (val > 0)? 1: 2;
+}
+
+bool intersects(coord p1, coord q1, coord p2, coord q2) {
+    int o1 = orientation(p1, q1, p2);
+    int o2 = orientation(p1, q1, q2);
+    int o3 = orientation(p2, q2, p1);
+    int o4 = orientation(p2, q2, q1);
+    if (o1 != o2 && o3 != o4) return true;
+    if (o1 == 0 && onSegment(p1, p2, q1)) return true;
+    if (o2 == 0 && onSegment(p1, q2, q1)) return true;
+    if (o3 == 0 && onSegment(p2, p1, q2)) return true;
+    if (o4 == 0 && onSegment(p2, q1, q2)) return true;
+    return false;
+}
+
+bool intersects(line a, line b) {
+ return intersects(a.s,a.e,b.s,b.e);
+}
+
+bool intersects(line a, GBShape b) {
+ line l;
+ l.s.x=b.x;l.s.y=b.y;
+ l.e.x=b.x+b.width;l.e.y=b.y;
+ if(intersects(a,l)) return 1;
+ l.s.x=b.x;l.s.y=b.y;
+ l.e.x=b.x;l.e.y=b.y+b.height;
+ if(intersects(a,l)) return 1;
+ l.s.x=b.x;l.s.y=b.y+b.height;
+ l.e.x=b.x+b.width;l.e.y=b.y+b.height;
+ if(intersects(a,l)) return 1;
+ l.s.x=b.x+b.width;l.s.y=b.y;
+ l.e.x=b.x+b.width;l.e.y=b.y+b.height;
+ if(intersects(a,l)) return 1;
+ return 0;
+}
+
+
+
+
 

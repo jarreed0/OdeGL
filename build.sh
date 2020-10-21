@@ -1,1 +1,1 @@
-g++ app.cpp -lX11
+g++ $1.cpp -lX11 #-lncurses

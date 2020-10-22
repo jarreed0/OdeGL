@@ -7,6 +7,13 @@
 //#include <curses.h> //-lncurses
 //#include "conio.h"
 
+#include <vector>
+#include <string>
+
+//loading files
+#include <fstream>
+#include <sstream>
+
 constexpr int FULLSCREEN = 0x0001;
 constexpr int RESIZABLE = 0x0010;
 constexpr int DEBUG = 0x0100;
@@ -25,6 +32,43 @@ struct coord {
 
 struct line {
  coord s, e;
+};
+
+struct coord3d {
+  double x, y, z;
+};
+
+struct triangle {
+ coord3d a, b, c;
+};
+
+struct mesh {
+ std::vector<triangle> tris;
+ bool loadObj(std::string fn) {
+   std::ifstream f(fn);
+   if(!f.is_open()) {
+     return false;
+   }
+   std::vector<coord3d> verts;
+   while(!f.eof()) {
+     char line[128];
+     f.getline(line, 128);
+     std::stringstream s;
+     s << line;
+     char junk;
+     if(line[0] == 'v') {
+       coord3d tmp;
+       s >> junk >> tmp.x >> tmp.y >> tmp.z;
+       verts.push_back(tmp);
+     }
+     if(line[0] == 'f') {
+       int f[3];
+       s >> junk >> f[0] >> f[1] >> f[2];
+       tris.push_back({verts[f[0]-1], verts[f[1]-1], verts[f[2]-1]});
+     }
+   }
+   return true;
+ }
 };
 
 bool attributes;

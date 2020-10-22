@@ -18,7 +18,7 @@ https://trello.com/b/KK6PEKuC/project
 
 - [ ] Week 7 - saving/importing 2d scenes
 
-- [ ] Week 8 - 3D scene; loading in object
+- [~] Week 8 - 3D scene; loading in object
 
 - [ ] Week 9 - adjustable camera/viewport
 
@@ -28,3 +28,7 @@ https://trello.com/b/KK6PEKuC/project
 
 Tue 20 Oct 2020 08:49:59 PM MDT
 working on fps, collision stuff, keyboard input
+
+Thu 22 Oct 2020 04:48:05 PM MDT
+added 3d object loading
+

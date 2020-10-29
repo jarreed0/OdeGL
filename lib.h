@@ -2,6 +2,18 @@
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
 
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+//#include <string.h>
+#include <math.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <X11/Xlib.h>
+#include <X11/extensions/XShm.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 //#include <curses.h> //-lncurses
@@ -19,6 +31,8 @@ constexpr int RESIZABLE = 0x0010;
 constexpr int DEBUG = 0x0100;
 constexpr int SCALABLE = 0x1000;
 
+#define PI 3.1415926535
+
 #define RED 16711680
 #define GREEN 65280
 #define BLUE 255
@@ -27,7 +41,7 @@ constexpr int SCALABLE = 0x1000;
 #define YELLOW 16776960
 
 struct coord {
- int x, y;
+ int x, y, w;
 };
 
 struct line {
@@ -35,43 +49,29 @@ struct line {
 };
 
 struct coord3d {
-  double x, y, z;
+  float x, y, z, w;
 };
 
 struct triangle {
- coord3d a, b, c;
+ coord3d c[3];
 };
 
-struct mesh {
- std::vector<triangle> tris;
- bool loadObj(std::string fn) {
-   std::ifstream f(fn);
-   if(!f.is_open()) {
-     return false;
-   }
-   std::vector<coord3d> verts;
-   while(!f.eof()) {
-     char line[128];
-     f.getline(line, 128);
-     std::stringstream s;
-     s << line;
-     char junk;
-     if(line[0] == 'v') {
-       coord3d tmp;
-       s >> junk >> tmp.x >> tmp.y >> tmp.z;
-       verts.push_back(tmp);
-     }
-     if(line[0] == 'f') {
-       int f[3];
-       s >> junk >> f[0] >> f[1] >> f[2];
-       tris.push_back({verts[f[0]-1], verts[f[1]-1], verts[f[2]-1]});
-     }
-   }
-   return true;
- }
+struct matrix {
+  float m[4][4] = { 0 };
 };
+
+void multiplyMatrix(coord3d &i, coord3d &o, matrix &m) {
+  o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
+	o.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + m.m[3][1];
+	o.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + m.m[3][2];
+	float w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + m.m[3][3];
+	if (w != 0.0f) {
+		o.x /= w; o.y /= w; o.z /= w;
+	}
+}
 
 bool attributes;
+matrix projection;
 
 unsigned long RGB(int r, int g, int b);
 void RGB(unsigned long &rgb, int r, int g, int b);
@@ -126,6 +126,7 @@ GC context;
 GBColor bkg, draw, font;
 int Width, Height;
 XWindowAttributes wnd;
+Visual *vis;
 void update() {
     if(attributes) {
         XGetWindowAttributes(dis, win, &wnd);
@@ -134,6 +135,95 @@ void update() {
     }
 }
 };
+
+struct mesh {
+ std::vector<triangle> tris;
+ bool loadObj(std::string fn) {
+   std::ifstream f(fn);
+   if(!f.is_open()) {
+     return false;
+   }
+   std::vector<coord3d> verts;
+   while(!f.eof()) {
+     char line[128];
+     f.getline(line, 128);
+     std::stringstream s;
+     s << line;
+     char junk;
+     if(line[0] == 'v') {
+       coord3d tmp;
+       s >> junk >> tmp.x >> tmp.y >> tmp.z;
+       verts.push_back(tmp);
+     }
+     if(line[0] == 'f') {
+       int f[3];
+       s >> junk >> f[0] >> f[1] >> f[2];
+       tris.push_back({verts[f[0]-1], verts[f[1]-1], verts[f[2]-1]});
+     }
+   }
+   return true;
+ }
+ float fNear = 0.1f;
+ float fFar = 1000.0f;
+ float fFov = 90.0f;
+ float fAspectRatio;
+ void calcAspect(GBWindow &gb) { fAspectRatio = (float)gb.Height / (float)gb.Width; }
+ float fFovRad = 1.0f / tanf(fFov * 0.5f / 180.0f * PI);
+ void init(GBWindow &gb) {
+  calcAspect(gb);
+  projection.m[0][0] = fAspectRatio * fFovRad;
+  projection.m[1][1] = fFovRad;
+  projection.m[2][2] = fFar / (fFar - fNear);
+  projection.m[3][2] = (-fFar * fNear) / (fFar - fNear);
+  projection.m[2][3] = 1.0f;
+  projection.m[3][3] = 0.0f;
+ }
+};
+
+
+triangle projectTriangle(GBWindow &gb, triangle &i, triangle &o) {
+  multiplyMatrix(i.c[0], o.c[0], projection);
+  multiplyMatrix(i.c[1], o.c[1], projection);
+  multiplyMatrix(i.c[2], o.c[2], projection);
+  o.c[0].x += 1.0f; o.c[0].y += 1.0f;
+	o.c[1].x += 1.0f; o.c[1].y += 1.0f;
+	o.c[2].x += 1.0f; o.c[2].y += 1.0f;
+	o.c[0].x *= 0.5f * (float)gb.Width;
+	o.c[0].y *= 0.5f * (float)gb.Height;
+	o.c[1].x *= 0.5f * (float)gb.Width;
+	o.c[1].y *= 0.5f * (float)gb.Height;
+	o.c[2].x *= 0.5f * (float)gb.Width;
+	o.c[2].y *= 0.5f * (float)gb.Height;
+  return o;
+}
+
+triangle offsetTriangle(triangle &i, triangle &o, float of) { //translate
+  o.c[0].z = i.c[0].z + of;
+  o.c[0].z = i.c[1].z + of;
+  o.c[0].z = i.c[2].z + of;
+  return o;
+}
+
+triangle project(GBWindow &gb, triangle tri, float offset) {
+  triangle triProjected, triTranslated;
+	triTranslated = tri;
+	triTranslated.c[0].z = tri.c[0].z + offset;
+	triTranslated.c[1].z = tri.c[1].z + offset;
+	triTranslated.c[2].z = tri.c[2].z + offset;
+	multiplyMatrix(triTranslated.c[0], triProjected.c[0], projection);
+	multiplyMatrix(triTranslated.c[1], triProjected.c[1], projection);
+	multiplyMatrix(triTranslated.c[2], triProjected.c[2], projection);
+	triProjected.c[0].x += 1.0f; triProjected.c[0].y += 1.0f;
+	triProjected.c[1].x += 1.0f; triProjected.c[1].y += 1.0f;
+	triProjected.c[2].x += 1.0f; triProjected.c[2].y += 1.0f;
+	triProjected.c[0].x *= 0.5f * (float)gb.Width;
+	triProjected.c[0].y *= 0.5f * (float)gb.Height;
+	triProjected.c[1].x *= 0.5f * (float)gb.Width;
+	triProjected.c[1].y *= 0.5f * (float)gb.Height;
+	triProjected.c[2].x *= 0.5f * (float)gb.Width;
+	triProjected.c[2].y *= 0.5f * (float)gb.Height;
+  return triProjected;
+}
 
 void closes(GBWindow &gb);
 void redraw(GBWindow &gb);
@@ -235,9 +325,24 @@ void drawLine(GBWindow& win, coord a, coord b) {
     setForeground(win, win.draw);
     XDrawLine(win.dis, win.win, win.context, a.x, a.y, b.x, b.y);
 }
+void drawLine(GBWindow& win, coord3d a, coord3d b) {
+    setForeground(win, win.draw);
+    XDrawLine(win.dis, win.win, win.context, a.x, a.y, b.x, b.y);
+}
 void drawLine(GBWindow& win, line l) {
     setForeground(win, win.draw);
     XDrawLine(win.dis, win.win, win.context, l.s.x, l.s.y, l.e.x, l.e.y);
+}
+void drawTriangle(GBWindow &gb, triangle tr) {
+  drawLine(gb, tr.c[0], tr.c[1]);
+  drawLine(gb, tr.c[1], tr.c[2]);
+  drawLine(gb, tr.c[2], tr.c[0]);
+}
+void drawMesh(GBWindow &gb, mesh m, float offset) {
+ for(auto tri : m.tris) {
+    triangle tri3D = project(gb, tri, offset);
+    drawTriangle(gb, tri3D);
+ }
 }
 void write(GBWindow& win, int x, int y, const char* text) {
     setForeground(win, win.font);
@@ -310,7 +415,8 @@ void initGB(GBWindow &tmp, const char* title, int width, int height, const int f
     }
     tmp.Width=width;
     tmp.Height=height;
-	tmp.dis=XOpenDisplay((char *)0);
+	  tmp.dis=XOpenDisplay((char *)0);
+    tmp.vis = DefaultVisual(tmp.dis, 0);
    	tmp.screen=DefaultScreen(tmp.dis);
     setBackground(tmp, WHITE);
 	setDrawColor(tmp, BLACK);
@@ -331,6 +437,12 @@ void initGB(GBWindow &tmp, const char* title, int width, int height, const int f
         hints->min_height = hints->max_height = tmp.Height;
         XSetWMNormalHints(tmp.dis, tmp.win, hints);
         XSetWMSizeHints(tmp.dis, tmp.win, hints, PMinSize|PMaxSize);
+    }
+    XClassHint *class_hint = XAllocClassHint();
+    if (class_hint) {
+      class_hint->res_name = class_hint->res_class = (char *)title;
+      XSetClassHint(tmp.dis, tmp.win, class_hint);
+      XFree(class_hint);
     }
     /*initscr();
     cbreak();
@@ -525,7 +637,41 @@ bool intersects(line a, GBShape b) {
  return 0;
 }
 
+struct GBSprite {
+  XImage *img;
+  uint8_t *imageData;
+  /*void load(GBWindow &gb, int w, int h) {
+    static XShmSegmentInfo shminfo;
+	  XImage *imgTmp = XShmCreateImage(gb.dis, gb.vis, 24, ZPixmap, 0, &shminfo, w, h); 
+  	shminfo.shmid = shmget(IPC_PRIVATE, imgTmp->bytes_per_line * imgTmp->height,IPC_CREAT|0777);
+    void ** data = (void**) &imageData;
+	  shminfo.shmaddr = imgTmp->data = *data = shmat(shminfo.shmid, 0, 0);
+	  shminfo.readOnly = False;
+  	XShmAttach(gb.dis, &shminfo);
+    img = imgTmp;
+  }*/
+};
 
+struct GBObject2d {
+  GBShape dest, src;
+  GBSprite spr;
+};
 
-
+void drawSprite(GBWindow &gb, GBObject2d &obj) {
+  int i, j;
+  static double time = 0;
+  unsigned char *p=obj.spr.imageData;
+  double ttime = sin(time)*256;
+  for(i=0; i<obj.dest.width; i++) {
+    for(j=0; j<obj.dest.height; j++) {
+      *p++=i%256; // blue
+      *p++=j%256; // green
+      *p++=ttime; // red
+      p++;
+    }
+  }
+  time+=0.06;
+  if (time >= M_PI) time = 0;
+  XPutImage(gb.dis, gb.win, gb.context, obj.spr.img, 0, 0, 0, 0, obj.src.width, obj.src.height);
+}
 

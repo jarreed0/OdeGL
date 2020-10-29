@@ -20,9 +20,9 @@ https://trello.com/b/KK6PEKuC/project
 
 - [~] Week 8 - 3D scene; loading in object
 
-- [ ] Week 9 - adjustable camera/viewport
+- [~] Week 9 - adjustable camera/viewport
 
-- [ ] Week 10 - 3d shapes, colors; saving/importing 3d scenes
+- [~] Week 10 - 3d shapes, colors; saving/importing 3d scenes
 
 - [ ] Week 11+ - fixing bugs, implementing stretch goals,  tutorials
 
@@ -32,3 +32,5 @@ working on fps, collision stuff, keyboard input
 Thu 22 Oct 2020 04:48:05 PM MDT
 added 3d object loading
 
+Thu 29 Oct 2020 12:37:52 PM MDT
+adding 3d projections

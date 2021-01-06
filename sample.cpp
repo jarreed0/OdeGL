@@ -86,7 +86,7 @@ void init() {
   shiftMeshOnZ(road, 2);
   road.setColors(WHITE, RGB(63, 60, 60));
   addToScene(scene1, road);
-  cube = createCube(1, 2, 3);
+  cube = createRect(1, 2, 3);
   cube.setColors(BLUE, WHITE);
   addToScene(scene1, cube);
   shiftMeshOnX(cube, -3.4f);
